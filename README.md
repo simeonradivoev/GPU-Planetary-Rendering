@@ -12,6 +12,8 @@ The camera Controls are as follows:
 * W/A/S/D - move camera
 * Mouse Scroll - Increase/Decrease camera speed
 * Space - Show/Hide mouse
+* C - Take Screenshot at Double the Screen Resolution
+* X - Exit Application
 
 Updated to Unity 2019.2.8f1
 
