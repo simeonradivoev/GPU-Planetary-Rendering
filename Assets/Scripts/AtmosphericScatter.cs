@@ -85,7 +85,7 @@ public class AtmosphericScatter : MonoBehaviour
 	{
 		//Transmittance is responsible for the change in the sun color as it moves
 		//The raw file is a 2D array of 32 bit floats with a range of 0 to 1
-		string path = Application.dataPath + "/Textures/transmittance.raw";
+		string path = Application.streamingAssetsPath + "/Textures/transmittance.raw";
 		ComputeBuffer buffer = new ComputeBuffer(TRANSMITTANCE_WIDTH * TRANSMITTANCE_HEIGHT, sizeof(float) * TRANSMITTANCE_CHANNELS);
 		CBUtility.WriteIntoRenderTexture(m_transmittance, TRANSMITTANCE_CHANNELS, path, buffer, m_writeData);
 		buffer.Release();
@@ -94,13 +94,13 @@ public class AtmosphericScatter : MonoBehaviour
 		//The raw file is a 4D array of 32 bit floats with a range of 0 to 1.589844
 		//As there is not such thing as a 4D texture the data is packed into a 3D texture 
 		//and the shader manually performs the sample for the 4th dimension
-		path = Application.dataPath + "/Textures/inscatter.raw";
+		path = Application.streamingAssetsPath + "/Textures/inscatter.raw";
 		buffer = new ComputeBuffer(INSCATTER_WIDTH * INSCATTER_HEIGHT * INSCATTER_DEPTH, sizeof(float) * INSCATTER_CHANNELS);
 		CBUtility.WriteIntoRenderTexture(m_inscatter, INSCATTER_CHANNELS, path, buffer, m_writeData);
 		buffer.Release();
 
 		//The raw file is a 2D array of 32 bit floats with a range of 0 to 1
-		path = Application.dataPath + "/Textures/irradiance.raw";
+		path = Application.streamingAssetsPath + "/Textures/irradiance.raw";
 		buffer = new ComputeBuffer(IRRADIANCE_WIDTH * IRRADIANCE_HEIGHT, sizeof(float) * IRRADIANCE_CHANNELS);
 		CBUtility.WriteIntoRenderTexture(m_irradiance, IRRADIANCE_CHANNELS, path, buffer, m_writeData);
 		buffer.Release();

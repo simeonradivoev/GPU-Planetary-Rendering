@@ -11,13 +11,12 @@ public class FlyCamera : MonoBehaviour
     public float fastMoveFactor = 3;
 	public float speedMultiplySpeed = 2;
 	public float speedMultiply = 1;
-	public float rotationRougness = 10;
-	public PlanetCreator planetCreator;
+    public PlanetCreator planetCreator;
 
     private bool cursorLocked = true;
-	private Quaternion acumilatedRotation;
+    private Quaternion rotation = Quaternion.identity;
 
-	private void Start()
+    private void Start()
 	{
 		Cursor.lockState = CursorLockMode.Locked;
 		Cursor.visible = false;
@@ -27,8 +26,8 @@ public class FlyCamera : MonoBehaviour
     {
 	    if (cursorLocked)
 	    {
-		    transform.localRotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse X") * cameraSensitivity * Time.deltaTime, Vector3.up);
-		    transform.localRotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse Y") * cameraSensitivity * Time.deltaTime, Vector3.left);
+            rotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse X") * cameraSensitivity, Vector3.up);
+            rotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse Y") * cameraSensitivity, Vector3.left);
 
 		    Vector3 direction = Vector3.zero;
 
@@ -50,22 +49,21 @@ public class FlyCamera : MonoBehaviour
 
 			transform.position += direction;
 
-			speedMultiply *= 1 + Input.GetAxis("Mouse ScrollWheel") * Time.deltaTime * speedMultiplySpeed;
+			speedMultiply *= 1 + Input.GetAxis("Mouse ScrollWheel") * speedMultiplySpeed;
 			speedMultiply = Mathf.Max(0, speedMultiply);
 
 
 			if (Input.GetKey(KeyCode.Q))
-		    {
-				acumilatedRotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime, new Vector3(0, 0, 1));
-		    }
+            {
+                rotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime, Vector3.back);
+            }
 		    if (Input.GetKey(KeyCode.E))
 		    {
-				acumilatedRotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime, new Vector3(0, 0, -1));
-		    }
+                rotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime,Vector3.forward);
+            }
 
-		    transform.localRotation *= acumilatedRotation;
-		    acumilatedRotation = Quaternion.Slerp(acumilatedRotation, Quaternion.identity, Time.deltaTime * rotationRougness);
-	    }
+            transform.localRotation = rotation;
+        }
 
 	    if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Escape))
 		{
