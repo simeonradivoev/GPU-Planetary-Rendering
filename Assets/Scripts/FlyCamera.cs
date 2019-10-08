@@ -74,6 +74,11 @@ public class FlyCamera : MonoBehaviour
 	    {
 		    ScreenCapture.CaptureScreenshot(Application.dataPath.Replace("Assets", "Screenshots") + string.Format("{0:yyyy-MM-dd_hh-mm-ss-tt}", DateTime.Now) + ".png",2);
 	    }
+
+        if (Input.GetKeyDown(KeyCode.X))
+        {
+            Application.Quit();
+        }
 	}
 
 	private void OnDrawGizmos()
