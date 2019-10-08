@@ -1,0 +1,29 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#include "ImprovedPerlinNoise3D.cginc"
+
+
+RWStructuredBuffer<float3> vertexBuffer;
+RWStructuredBuffer<float3> normalBuffer;
+
+float Scale;
+float TerrainScale;
+float TerrainBumpScale;
+
+[numthreads(16,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	float3 Pos = vertexBuffer[id.x] + normalize(vertexBuffer[id.x]) * (1 - turbulence(vertexBuffer[id.x],4)) * TerrainScale;
+	float3 P = vertexBuffer[id.x];
+	float e = 4;
+	int o = 8;
+
+	float F = (1 - turbulence(float3(P.x,P.y,P.z),o)) * TerrainScale;
+	float Fx = (1 - turbulence(float3(P.x+e,P.y,P.z),o)) * TerrainScale;
+	float Fy = (1 - turbulence(float3(P.x,P.y+e,P.z),o)) * TerrainScale;
+	float Fz = (1 - turbulence(float3(P.x,P.y,P.z+e),o)) * TerrainScale;
+	float3 dF = float3((Fx-F)/e, (Fy-F)/e, (Fz-F)/e);
+
+	normalBuffer[id.x] = normalize(normalize(vertexBuffer[id.x])-dF);
+	vertexBuffer[id.x] = Pos;
+}
