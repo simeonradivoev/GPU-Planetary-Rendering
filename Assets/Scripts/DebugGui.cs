@@ -1,14 +1,17 @@
-﻿using UnityEngine;
-using System.Collections;
-using UnityEditor;
+﻿using System;
+using System.Diagnostics;
+using UnityEngine;
+using UnityEngine.Profiling;
 
 public class DebugGui : MonoBehaviour
 {
 	[SerializeField] private AtmosphericScatter scatter;
 	[SerializeField] private new FlyCamera camera;
 	[SerializeField] private Transform orientationGizmo;
+    [SerializeField] private PlanetCreator planetCreator;
 	private float deltaTime;
 	private bool showOrientationGizmo;
+    private bool showDetailedInfo;
 
 	private void Start()
 	{
@@ -25,16 +28,27 @@ public class DebugGui : MonoBehaviour
 		style.normal.textColor = Color.white;
 		float msec = deltaTime * 1000.0f;
 		float fps = 1.0f / deltaTime;
-		string text = string.Format("{0:0.0} ms ({1:0.} fps)", msec, fps);
+		string text = $"{msec:0.0} ms ({fps:0.} fps)";
 		GUILayout.Label(text, style);
 		GUILayout.Label("Speed: " + camera.speedMultiply, style);
 
+        showDetailedInfo = GUILayout.Toggle(showDetailedInfo, "Show Detailed Info");
 		showOrientationGizmo = GUILayout.Toggle(showOrientationGizmo, "Show Orientation");
 		QualitySettings.vSyncCount = GUILayout.Toggle(QualitySettings.vSyncCount == 1, "Enable VSync") ? 1 : 0;
 		GUILayout.BeginHorizontal();
 		GUILayout.Label("Downsample");
 		scatter.downscale = (int)GUILayout.HorizontalSlider(scatter.downscale, 1, 10,GUILayout.Width(100));
 		GUILayout.EndHorizontal();
+
+        if (showDetailedInfo)
+        {
+            Process proc = Process.GetCurrentProcess();
+
+            GUILayout.Label($"Mesh Pool Size: {planetCreator.MeshPoolSize}");
+            GUILayout.Label($"Split Pool Size: {planetCreator.SplitPoolSize}");
+            GUILayout.Label($"Mono Memory Usage: {Profiler.GetMonoUsedSizeLong() * 1e-6:F0}mb");
+            GUILayout.Label($"Process Memory Usage: {GC.GetTotalMemory(false) * 1e-6:F0}mb");
+        }
 
 		if (GUI.changed)
 		{

@@ -6,22 +6,21 @@ public class PlanetChunkProperties
     public Vector3 Center;
     public Bounds Bounds;
     public Quaternion Rotation;
-    public PlanetCreator Planet;
-    private PlanetChunkProperties[] chunks;
-    public PlanetChunkObject Chunk;
+    public PlanetChunkProperties[] Children;
+    public PlanetChunkObject ChunkObject;
 
     public bool isSplit
     {
         get
         {
-            if (chunks == null)
+            if (Children == null)
                 return false;
             else
-                foreach (PlanetChunkProperties chunk in chunks)
+                foreach (PlanetChunkProperties chunk in Children)
                 {
                     if (chunk == null)
                         return false;
-                    else if (chunk.Chunk == null)
+                    else if (chunk.ChunkObject == null)
                         return false;
                     else
                     {
@@ -37,136 +36,12 @@ public class PlanetChunkProperties
     public float Size;
     public float maxGeoError;
 
-    public float maxVerError =>
-        (maxGeoError / Mathf.Sqrt(Chunk.Renderer.bounds
-             .SqrDistance(Planet.MainCamera.transform.position)) /*Vector3.Distance(Planet.MainCamera.transform.position,Center * Planet.SphereRadius)*/
-        ) * Planet.K;
-
-    public bool needsSplit => maxVerError > Planet.MaxError;
-
     public Vector2 min;
     public int LODLevel = 0;
     public bool isSpliting = false;
     public int SplitCount = 0;
     public bool isMerged = true;
     public bool Active = false;
-
-    public void ManageRecursive()
-    {
-        if (needsSplit && LODLevel < Planet.MaxLodLevel)
-        {
-            if (isSplit)
-            {
-                HideChunk();
-                isSpliting = false;
-
-                foreach (PlanetChunkProperties child in chunks)
-                {
-                    child?.ManageRecursive();
-                }
-            }
-            else
-            {
-                Planet.AddToSplitPool(this);
-            }
-        }
-        else
-        {
-            Merge();
-
-        }
-    }
-
-    public void Merge()
-    {
-        if (!isMerged)
-        {
-            if (chunks != null)
-                foreach (PlanetChunkProperties child in chunks)
-                {
-                    MergeChildren(child);
-                }
-
-            EnableChunk();
-            isMerged = true;
-        }
-    }
-
-    public void Split()
-    {
-        if (Chunk != null)
-        {
-            if (needsSplit)
-            {
-                if (chunks == null)
-                {
-                    chunks = new PlanetChunkProperties[4];
-                    Planet.CreateChunk(this, min, 0);
-                    Planet.CreateChunk(this, MiddleLeft, 1);
-                    Planet.CreateChunk(this, BottomMiddle, 2);
-                    Planet.CreateChunk(this, Middle, 3);
-                }
-                else
-                {
-                    foreach (PlanetChunkProperties child in chunks)
-                    {
-                        child.EnableChunk();
-                    }
-                }
-
-                isMerged = false;
-            }
-        }
-    }
-
-    void MergeChildren(PlanetChunkProperties child)
-    {
-        if (!child.isMerged)
-        {
-            if (child.chunks != null)
-            {
-                foreach (PlanetChunkProperties c in child.chunks)
-                {
-                    MergeChildren(c);
-                }
-            }
-        }
-
-        child.DisableChunk();
-        isMerged = true;
-    }
-
-    public void EnableChunk()
-    {
-        if (Chunk == null)
-        {
-            Chunk = Planet.GetChunk(this);
-        }
-
-        Chunk.Renderer.enabled = true;
-    }
-
-    public void HideChunk()
-    {
-        if (Chunk != null)
-        {
-            if (Chunk.Renderer.enabled)
-            {
-                Chunk.Renderer.enabled = false;
-            }
-        }
-    }
-
-    public void DisableChunk()
-    {
-        if (Chunk.Collider != null)
-            Chunk.Collider.enabled = false;
-
-        HideChunk();
-        Planet.AddToChunkPool(Chunk);
-        Chunk = null;
-        Active = false;
-    }
 
     public Vector2 BottomLeft => min;
 
@@ -188,9 +63,7 @@ public class PlanetChunkProperties
 
     public PlanetChunkProperties[] Chunks
     {
-        get => chunks;
-        set => chunks = value;
+        get => Children;
+        set => Children = value;
     }
-
-    public PlanetChunkObject ChunkObject => Chunk;
 }

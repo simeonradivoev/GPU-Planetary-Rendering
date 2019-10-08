@@ -1,6 +1,8 @@
     using UnityEngine;
     using System.Collections;
     using System.Collections.Generic;
+    using Unity.Collections;
+    using UnityEngine.Rendering;
 
     public class PlanetCreator : MonoBehaviour
     {
@@ -19,6 +21,7 @@
         public int MaxLodLevel = 7; //max lod division level
         public int LodColliderStart = 5; //what level to start collision generation
         public float MaxError = 1; //max lod error
+        public float MaxSplitsPerSecond = 20;
 
         public float K { get; set; }
 
@@ -37,6 +40,22 @@
         public ComputeShader PlanetMapGeneratorShader; //Final Compute shader
 
         private ImprovedPerlinNoise m_perlin; //gpu perlin noise
+
+        public int MeshPoolSize => MeshPool.Count;
+        public int SplitPoolSize => SplitPool.Count;
+
+        //used to avoid GC
+        private readonly List<Vector2> uvsTmp = new List<Vector2>();
+        private readonly List<Vector3> vertexTmp = new List<Vector3>();
+        private readonly List<Vector3> normalTmp = new List<Vector3>();
+        private float lastSplitTime;
+
+        private static readonly int Frequency = Shader.PropertyToID("_Frequency");
+        private static readonly int Lacunarity = Shader.PropertyToID("_Lacunarity");
+        private static readonly int Gain = Shader.PropertyToID("_Gain");
+        private static readonly int PlanetRadius = Shader.PropertyToID("_PlanetRadius");
+        private static readonly int PermTable2D = Shader.PropertyToID("_PermTable2D");
+        private static readonly int Gradient3D = Shader.PropertyToID("_Gradient3D");
 
         public void Start()
         {
@@ -57,11 +76,9 @@
 
             for (int i = 0; i < PoolStartPopulation; i++)
             {
-                AddToChunkPool(CreateBasicChunk());
+                AddToChunkPool(CreateBasicChunkObject());
             }
 
-
-            StartCoroutine(ManageChunkSplit());
             //CreateTemperatureMap();
         }
 
@@ -103,7 +120,9 @@
             }
         }
 
-        //precompute atmosphere, normal and vertex data
+        /// <summary>
+        /// precompute atmosphere, normal and vertex data
+        /// </summary>
         public void Precompute()
         {
             K = Screen.width / (2f * Mathf.Tan((65f / 2f) * Mathf.Deg2Rad));
@@ -115,8 +134,8 @@
             VertexComputeShader.SetTexture(0, "_PermTable2D", perm);
             VertexComputeShader.SetTexture(0, "_Gradient3D", grad);
 
-            mat.SetTexture("_PermTable2D", perm);
-            mat.SetTexture("_Gradient3D", grad);
+            mat.SetTexture(PermTable2D, perm);
+            mat.SetTexture(Gradient3D, grad);
 
             VertexComputeBuffer = new ComputeBuffer((ChunkSegments + 2) * (ChunkSegments + 2), 12);
             NormalComputeBuffer = new ComputeBuffer((ChunkSegments + 2) * (ChunkSegments + 2), 12);
@@ -137,7 +156,7 @@
         {
             PlanetChunkProperties p =
                 CreateChunkProperties(null, Quaternion.AngleAxis(angle, rotationDir), 1f, 0, Vector2.zero);
-            GetChunk(p);
+            GetFreeChunkObject(p);
             rootChunks.Add(p);
         }
 
@@ -146,12 +165,14 @@
         {
             parent.Chunks[index] =
                 CreateChunkProperties(parent, parent.Rotation, parent.Size / 2f, parent.LODLevel + 1, min);
-            parent.Chunks[index].Chunk = GetChunk(parent.Chunks[index]);
-            parent.Chunks[index].Bounds = parent.Chunks[index].Chunk.GetComponent<MeshRenderer>().bounds;
+            parent.Chunks[index].ChunkObject = GetFreeChunkObject(parent.Chunks[index]);
+            parent.Chunks[index].Bounds = parent.Chunks[index].ChunkObject.GetComponent<MeshRenderer>().bounds;
         }
 
-        //Create a basic chunk
-        private PlanetChunkObject CreateBasicChunk()
+        /// <summary>
+        /// Create a basic chunk
+        /// </summary>
+        private PlanetChunkObject CreateBasicChunkObject()
         {
             GameObject chunkObject = new GameObject("Chunk", typeof(MeshFilter), typeof(MeshCollider),
                 typeof(MeshRenderer), typeof(PlanetChunkObject));
@@ -165,11 +186,11 @@
         }
 
         //Update the chunk's position
-        public PlanetChunkObject UpdateChunk(PlanetChunkProperties chunkProperties, PlanetChunkObject chunk)
+        public PlanetChunkObject UpdateChunkObject(PlanetChunkProperties chunkProperties, PlanetChunkObject chunk)
         {
             chunk.transform.localPosition = Vector3.zero;
             chunk.Properties = chunkProperties;
-            chunkProperties.Chunk = chunk;
+            chunkProperties.ChunkObject = chunk;
             UpdateChunkMesh(chunk);
             return chunk;
         }
@@ -210,8 +231,10 @@
             return GetNearestChunkProperties(nearestChunk, point);
         }
 
-        //Get free chunk from pool
-        public PlanetChunkObject GetChunkFromPool()
+        /// <summary>
+        /// Get free chunk from pool. Returns null if not exists.
+        /// </summary>
+        public PlanetChunkObject GetChunkObjectFromPool()
         {
             while (MeshPool.Count > 0)
             {
@@ -221,22 +244,26 @@
             return null;
         }
 
-        //Get Free Chunk if none exists, create
-        public PlanetChunkObject GetChunk(PlanetChunkProperties chunkProperties)
+        /// <summary>
+        /// Get Free Chunk object if none exists, create
+        /// </summary>
+        public PlanetChunkObject GetFreeChunkObject(PlanetChunkProperties chunkProperties)
         {
-            PlanetChunkObject c = GetChunkFromPool();
+            PlanetChunkObject c = GetChunkObjectFromPool();
 
             if (c == null)
             {
-                c = CreateBasicChunk();
+                c = CreateBasicChunkObject();
             }
 
-            UpdateChunk(chunkProperties, c);
+            UpdateChunkObject(chunkProperties, c);
 
             return c;
         }
 
-        //Update the Chunk mesh
+        /// <summary>
+        /// Update the Chunk mesh
+        /// </summary>
         public void UpdateChunkMesh(PlanetChunkObject chunk)
         {
             if (chunk.Filter.sharedMesh == null)
@@ -244,37 +271,27 @@
                 chunk.Filter.sharedMesh = CopyMesh(BasicPlane);
             }
 
-            Vector3[] vertices, normals;
-            Vector2[] uv;
-            int[] triangles = chunk.Filter.sharedMesh.triangles;
-
-            CaluclateVertex(out vertices, out normals, out uv, triangles, chunk.Properties);
-            ApplyMesh(chunk, vertices, normals, uv);
-
-            /*Loom.RunAsync(() =>
-                {
-                    Loom.QueueOnMainThread(() =>
-                    {
-                    
-                    });
-                });*/
+            CaluclateVertex(chunk);
         }
 
-        //Update the GPU shader noise
+        /// <summary>
+        /// Update the GPU shader noise
+        /// </summary>
         private void UpdateNoise()
         {
-            VertexComputeShader.SetFloat("_Frequency", TerrainFreq);
-            VertexComputeShader.SetFloat("_Lacunarity", Terrainlacunarity);
-            VertexComputeShader.SetFloat("_Gain", TerrainGain);
+            VertexComputeShader.SetFloat(Frequency, TerrainFreq);
+            VertexComputeShader.SetFloat(Lacunarity, Terrainlacunarity);
+            VertexComputeShader.SetFloat(Gain, TerrainGain);
 
-            mat.SetFloat("_Frequency", TerrainFreq);
-            mat.SetFloat("_Lacunarity", Terrainlacunarity);
-            mat.SetFloat("_Gain", TerrainGain);
-            mat.SetFloat("_PlanetRadius", SphereRadius);
-
+            mat.SetFloat(Frequency, TerrainFreq);
+            mat.SetFloat(Lacunarity, Terrainlacunarity);
+            mat.SetFloat(Gain, TerrainGain);
+            mat.SetFloat(PlanetRadius, SphereRadius);
         }
 
-        //ad to chunk pool
+        /// <summary>
+        /// add to chunk pool
+        /// </summary>
         public void AddToChunkPool(PlanetChunkObject chunk)
         {
             MeshPool.Push(chunk);
@@ -286,7 +303,6 @@
             PlanetChunkProperties chunk = new PlanetChunkProperties();
             chunk.Rotation = rotation;
             chunk.Parent = parent;
-            chunk.Planet = this;
 
             chunk.LODLevel = LodLevel;
             chunk.Size = Size;
@@ -298,25 +314,56 @@
             return chunk;
         }
 
-
-        private void ApplyMesh(PlanetChunkObject chunk, Vector3[] vertices, Vector3[] normals, Vector2[] uv)
+        /// <summary>
+        /// Calculate the elevation data and create it as a Mesh (on CPU to use Physics)
+        /// </summary>
+        public void CaluclateVertex(PlanetChunkObject chunk)
         {
-            chunk.name = "Recycled Mesh";
-            chunk.Filter.mesh.vertices = vertices;
-            chunk.Filter.mesh.normals = normals;
-            chunk.Filter.mesh.uv = uv;
-            chunk.Filter.mesh.RecalculateBounds();
-            //chunk.Filter.mesh.RecalculateNormals();
+            int hCount2 = ChunkSegments + 2;
+            int vCount2 = ChunkSegments + 2;
+            int numVertices = hCount2 * vCount2;
 
-            chunk.GetComponent<Renderer>().enabled = true;
+            vertexTmp.Clear();
+            normalTmp.Clear();
+            uvsTmp.Clear();
+
+            float Scale = chunk.Properties.Size / (float) ChunkSegments;
+
+            for (float y = 0; y < vCount2; y++)
+            {
+                for (float x = 0; x < hCount2; x++)
+                {
+                    float px = chunk.Properties.BottomLeft.x + x * Scale - 0.5f;
+                    float py = chunk.Properties.BottomLeft.y + y * Scale - 0.5f;
+
+                    vertexTmp.Add(GeVertex(chunk.Properties.Rotation, SphereRadius, px, py));
+                    uvsTmp.Add(chunk.Properties.BottomLeft + new Vector2(x * Scale, y * Scale));
+                }
+            }
+
+            VertexComputeBuffer.SetData(vertexTmp);
+            NormalComputeBuffer.SetData(normalTmp);
+
+            VertexComputeShader.SetFloat("Scale", Scale);
+            VertexComputeShader.SetFloat("TerrainScale", TerrainScale);
+            VertexComputeShader.SetFloat("TerrainBumpScale", TerrainBumpScale);
+
+            VertexComputeShader.Dispatch(0, numVertices / 16, 1, 1);
+
+            AsyncGPUReadback.Request(VertexComputeBuffer, chunk.ApplyVertexData);
+            AsyncGPUReadback.Request(NormalComputeBuffer, chunk.ApplyNormalData);
+            chunk.MarkCalculatingVertexData();
+
+            chunk.name = "Recycled Mesh";
+            chunk.Filter.sharedMesh.SetUVs(0, uvsTmp);
+            chunk.SetVisible(true);
 
             if (chunk.Properties != null)
             {
-
                 if (chunk.Properties.LODLevel >= LodColliderStart)
                 {
                     chunk.Collider.sharedMesh = null;
-                    chunk.Collider.sharedMesh = chunk.Filter.mesh;
+                    chunk.Collider.sharedMesh = chunk.Filter.sharedMesh;
                     chunk.Collider.enabled = true;
                 }
                 else
@@ -326,84 +373,6 @@
 
                 chunk.Properties.Active = true;
             }
-
-        }
-
-        //Caluclate the elevation data and create it as a Mesh (on CPU to use Physics)
-        public void CaluclateVertex(out Vector3[] vert, out Vector3[] normal, out Vector2[] uvs, int[] triangles,
-            PlanetChunkProperties chunk)
-        {
-
-            int hCount2 = ChunkSegments + 2;
-            int vCount2 = ChunkSegments + 2;
-            int numVertices = hCount2 * vCount2;
-
-            Vector3[] vertices = new Vector3[numVertices];
-            Vector3[] normals = new Vector3[numVertices];
-            Vector2[] uv = new Vector2[numVertices];
-            float Scale = chunk.Size / (float) ChunkSegments;
-            int index = 0;
-
-            for (float y = 0; y < vCount2; y++)
-            {
-                for (float x = 0; x < hCount2; x++)
-                {
-                    float px = chunk.BottomLeft.x + x * Scale - 0.5f;
-                    float py = chunk.BottomLeft.y + y * Scale - 0.5f;
-
-                    Vector3 pos = new Vector3(px, 0.5f, py);
-
-                    vertices[index] = GeVertex(chunk.Rotation, SphereRadius, px, py);
-                    uv[index] = chunk.BottomLeft + new Vector2(x * Scale, y * Scale);
-                    index++;
-                }
-            }
-
-            VertexComputeBuffer.SetData(vertices);
-            NormalComputeBuffer.SetData(normals);
-
-            VertexComputeShader.SetFloat("Scale", Scale);
-            VertexComputeShader.SetFloat("TerrainScale", TerrainScale);
-            VertexComputeShader.SetFloat("TerrainBumpScale", TerrainBumpScale);
-
-            VertexComputeShader.Dispatch(0, numVertices / 16, 1, 1);
-
-            VertexComputeBuffer.GetData(vertices);
-            NormalComputeBuffer.GetData(normals);
-
-            /*
-                int index = 0;
-                float Scale = chunk.Size / (float)ChunkSegments;
-                float uvFactor = chunk.Size / (float)ChunkSegments;
-    
-                for (float y = 0; y < vCount2; y++)
-                {
-                    for (float x = 0; x < hCount2; x++)
-                    {
-                        float px = chunk.BottomLeft.x + x * Scale - 0.5f;
-                        float py = chunk.BottomLeft.y + y * Scale - 0.5f;
-    
-                        Vector3 pos = new Vector3(px, 0.5f, py);
-    
-                        vertices[index] = GeVertex(chunk.Rotation, SphereRadius, px, py);
-    
-                        uv[index] = chunk.BottomLeft + new Vector2(x * uvFactor, y * uvFactor);
-    
-                        Vector3 va = GeVertex(chunk.Rotation, SphereRadius, px + Scale, py);
-                        Vector3 vb = GeVertex(chunk.Rotation, SphereRadius, px, py + Scale);
-                        Vector3 vc = GeVertex(chunk.Rotation, SphereRadius, px - Scale, py);
-                        Vector3 vd = GeVertex(chunk.Rotation, SphereRadius, px, py - Scale);
-    
-                        normals[index] = ((Vector3.Cross(va, vb) + Vector3.Cross(vb, vc) + Vector3.Cross(vc, vd) + Vector3.Cross(vd, va)) / -4).normalized;
-                        index++;
-                    }
-                }*/
-
-            vert = vertices;
-            normal = normals;
-            uvs = uv;
-
-            //VertexComputeBuffer.Release();
         }
 
         public Vector3 GeVertex(Quaternion rotation, float SphereRadius, float X, float Y)
@@ -493,15 +462,7 @@
 
         public static Mesh CopyMesh(Mesh mesh)
         {
-            Mesh m = new Mesh();
-            m.vertices = mesh.vertices;
-            m.triangles = mesh.triangles;
-            m.normals = mesh.normals;
-            m.colors = mesh.colors;
-            m.tangents = mesh.tangents;
-            m.uv = mesh.uv;
-
-            return m;
+            return Instantiate(mesh);
         }
 
         //Fast Plane Generation
@@ -573,15 +534,12 @@
             return b;
         }
 
-        //normalize plane
+        /// <summary>
+        /// normalize plane
+        /// </summary>
         private Vector3 ToSphere(Vector3 vector)
         {
-            Vector3 output = new Vector3();
-            output = vector.normalized;
-            //output.x = vector.x * Mathf.Sqrt(1 - (vector.y * vector.y / 2f) - (vector.z * vector.z / 2f) - ((vector.y * vector.y * vector.z * vector.z / 3f)));
-            //output.y = vector.x * Mathf.Sqrt(1 - (vector.z * vector.z / 2f) - (vector.x * vector.x / 2f) - ((vector.z * vector.z * vector.x * vector.x / 3f)));
-            //output.z = vector.x * Mathf.Sqrt(1 - (vector.x * vector.x / 2f) - (vector.y * vector.y / 2f) - ((vector.x * vector.x * vector.y * vector.y / 3f)));
-            return output;
+            return vector.normalized;
         }
 
         private Vector3 SphericalPos(Vector3 pos, float radius)
@@ -593,21 +551,24 @@
         {
             ManageChunks();
             UpdateNoise();
+
+            if (SplitPool.Count > 0 && lastSplitTime - Time.time <= 0)
+            {
+                PlanetChunkProperties c = SplitPool.Dequeue();
+                Split(c);
+                lastSplitTime = Time.time + 1f / MaxSplitsPerSecond;
+            }
         }
 
-        private IEnumerator ManageChunkSplit()
+        public bool NeedsSplit(PlanetChunkProperties chunk)
         {
-            while (true)
-            {
-                while (SplitPool.Count > 0)
-                {
-                    PlanetChunkProperties c = SplitPool.Dequeue();
-                    c.Split();
-                    yield return null;
-                }
+            var maxVerError =
+                (chunk.maxGeoError / Mathf.Sqrt(chunk.ChunkObject.Renderer.bounds
+                     .SqrDistance(MainCamera.transform
+                         .position)) /*Vector3.Distance(Planet.MainCamera.transform.position,Center * Planet.SphereRadius)*/
+                ) * K;
 
-                yield return null;
-            }
+            return maxVerError > MaxError;
         }
 
         public void AddToSplitPool(PlanetChunkProperties chunk)
@@ -622,8 +583,134 @@
         {
             foreach (PlanetChunkProperties chunk in rootChunks)
             {
-                chunk.ManageRecursive();
+                ManageRecursive(chunk);
             }
+        }
+
+        public void ManageRecursive(PlanetChunkProperties chunk)
+        {
+            if (NeedsSplit(chunk) && chunk.LODLevel < MaxLodLevel)
+            {
+                if (chunk.isSplit)
+                {
+                    bool childrenGeneratingFlag = false;
+
+                    foreach (PlanetChunkProperties child in chunk.Children)
+                    {
+                        childrenGeneratingFlag |= child.ChunkObject.IsCalculating;
+                        ManageRecursive(child);
+                    }
+
+                    if (!childrenGeneratingFlag)
+                    {
+                        HideChunk(chunk);
+                    }
+
+                    chunk.isSpliting = false;
+                }
+                else
+                {
+                    AddToSplitPool(chunk);
+                }
+            }
+            else
+            {
+                Merge(chunk);
+            }
+        }
+
+        public void Split(PlanetChunkProperties chunk)
+        {
+            if (chunk.ChunkObject != null)
+            {
+                if (NeedsSplit(chunk))
+                {
+                    if (chunk.Children == null)
+                    {
+                        chunk.Children = new PlanetChunkProperties[4];
+                        CreateChunk(chunk, chunk.min, 0);
+                        CreateChunk(chunk, chunk.MiddleLeft, 1);
+                        CreateChunk(chunk, chunk.BottomMiddle, 2);
+                        CreateChunk(chunk, chunk.Middle, 3);
+                    }
+                    else
+                    {
+                        foreach (PlanetChunkProperties child in chunk.Children)
+                        {
+                            EnableChunk(child);
+                        }
+                    }
+
+                    chunk.isMerged = false;
+                }
+            }
+        }
+
+        public void Merge(PlanetChunkProperties chunk)
+        {
+            if (!chunk.isMerged)
+            {
+                if (chunk.Children != null)
+                {
+                    foreach (PlanetChunkProperties child in chunk.Children)
+                    {
+                        MergeChildren(chunk, child);
+                    }
+                }
+
+                EnableChunk(chunk);
+                chunk.isMerged = true;
+            }
+        }
+
+        void MergeChildren(PlanetChunkProperties parent, PlanetChunkProperties child)
+        {
+            if (!child.isMerged)
+            {
+                if (child.Children != null)
+                {
+                    foreach (PlanetChunkProperties c in child.Children)
+                    {
+                        //recursively merge
+                        MergeChildren(parent, c);
+                    }
+                }
+            }
+
+            DisableChunk(child);
+            parent.isMerged = true;
+        }
+
+        public void EnableChunk(PlanetChunkProperties chunk)
+        {
+            if (chunk.ChunkObject == null)
+            {
+                chunk.ChunkObject = GetFreeChunkObject(chunk);
+            }
+
+            chunk.ChunkObject.SetVisible(true);
+        }
+
+        public void HideChunk(PlanetChunkProperties chunk)
+        {
+            if (chunk.ChunkObject != null)
+            {
+                if (chunk.ChunkObject.IsVisible)
+                {
+                    chunk.ChunkObject.SetVisible(false);
+                }
+            }
+        }
+
+        public void DisableChunk(PlanetChunkProperties chunk)
+        {
+            if (chunk.ChunkObject.Collider != null)
+                chunk.ChunkObject.Collider.enabled = false;
+
+            HideChunk(chunk);
+            AddToChunkPool(chunk.ChunkObject);
+            chunk.ChunkObject = null;
+            chunk.Active = false;
         }
 
         private void OnDisable()
