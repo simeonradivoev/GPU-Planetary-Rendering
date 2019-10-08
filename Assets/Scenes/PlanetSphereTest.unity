@@ -621,7 +621,7 @@ MonoBehaviour:
   MaxLodLevel: 11
   LodColliderStart: 11
   MaxError: 82
-  MaxSplitsPerSecond: 60
+  MaxSplitsPerSecond: 120
   PoolStartPopulation: 0
   VertexComputeShader: {fileID: 7200000, guid: abad5c50c8d10d444be7613916021be8, type: 3}
   PlanetMapGeneratorShader: {fileID: 7200000, guid: bf32b02f7e3220549ac8fb773baf7b44,
