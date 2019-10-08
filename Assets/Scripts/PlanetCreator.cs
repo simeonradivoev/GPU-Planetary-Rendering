@@ -159,7 +159,8 @@
             PlanetChunkObject chunk = chunkObject.GetComponent<PlanetChunkObject>();
             chunk.Filter = chunk.GetComponent<MeshFilter>();
             chunk.Collider = chunk.GetComponent<MeshCollider>();
-            chunk.GetComponent<Renderer>().sharedMaterial = mat;
+            chunk.Renderer = chunk.GetComponent<Renderer>();
+            chunk.Renderer.sharedMaterial = mat;
             return chunk;
         }
 
@@ -365,7 +366,8 @@
             VertexComputeShader.SetFloat("TerrainScale", TerrainScale);
             VertexComputeShader.SetFloat("TerrainBumpScale", TerrainBumpScale);
 
-            VertexComputeShader.Dispatch(0, numVertices, 1, 1);
+            VertexComputeShader.Dispatch(0, numVertices / 16, 1, 1);
+
             VertexComputeBuffer.GetData(vertices);
             NormalComputeBuffer.GetData(normals);
 

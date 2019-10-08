@@ -26,10 +26,10 @@ public class FlyCamera : MonoBehaviour
     {
 	    if (cursorLocked)
 	    {
-            rotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse X") * cameraSensitivity, Vector3.up);
-            rotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse Y") * cameraSensitivity, Vector3.left);
+            transform.localRotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse X") * cameraSensitivity, Vector3.up);
+            transform.localRotation *= Quaternion.AngleAxis(Input.GetAxis("Mouse Y") * cameraSensitivity, Vector3.left);
 
-		    Vector3 direction = Vector3.zero;
+		    Vector3 direction;
 
 		    if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
 		    {
@@ -55,14 +55,12 @@ public class FlyCamera : MonoBehaviour
 
 			if (Input.GetKey(KeyCode.Q))
             {
-                rotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime, Vector3.back);
+                transform.localRotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime, Vector3.back);
             }
 		    if (Input.GetKey(KeyCode.E))
 		    {
-                rotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime,Vector3.forward);
+                transform.localRotation *= Quaternion.AngleAxis(rollSpeed * Time.deltaTime,Vector3.forward);
             }
-
-            transform.localRotation = rotation;
         }
 
 	    if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Escape))

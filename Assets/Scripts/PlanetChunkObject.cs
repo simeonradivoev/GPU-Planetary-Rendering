@@ -5,6 +5,7 @@ public class PlanetChunkObject : MonoBehaviour
 	public PlanetChunkProperties Properties;
 	public MeshFilter Filter;
 	public MeshCollider Collider;
+    public Renderer Renderer;
 
 	private void OnDrawGizmos()
 	{

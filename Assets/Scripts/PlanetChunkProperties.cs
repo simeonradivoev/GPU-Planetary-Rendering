@@ -38,9 +38,8 @@ public class PlanetChunkProperties
     public float maxGeoError;
 
     public float maxVerError =>
-        (maxGeoError / Mathf.Sqrt(Chunk.GetComponent<Renderer>().bounds
-             .SqrDistance(Planet.MainCamera.transform
-                 .position)) /*Vector3.Distance(Planet.MainCamera.transform.position,Center * Planet.SphereRadius)*/
+        (maxGeoError / Mathf.Sqrt(Chunk.Renderer.bounds
+             .SqrDistance(Planet.MainCamera.transform.position)) /*Vector3.Distance(Planet.MainCamera.transform.position,Center * Planet.SphereRadius)*/
         ) * Planet.K;
 
     public bool needsSplit => maxVerError > Planet.MaxError;
@@ -63,8 +62,7 @@ public class PlanetChunkProperties
 
                 foreach (PlanetChunkProperties child in chunks)
                 {
-                    if (child != null)
-                        child.ManageRecursive();
+                    child?.ManageRecursive();
                 }
             }
             else
@@ -77,8 +75,6 @@ public class PlanetChunkProperties
             Merge();
 
         }
-
-
     }
 
     public void Merge()
@@ -147,16 +143,16 @@ public class PlanetChunkProperties
             Chunk = Planet.GetChunk(this);
         }
 
-        Chunk.GetComponent<Renderer>().enabled = true;
+        Chunk.Renderer.enabled = true;
     }
 
     public void HideChunk()
     {
         if (Chunk != null)
         {
-            if (Chunk.GetComponent<Renderer>().enabled)
+            if (Chunk.Renderer.enabled)
             {
-                Chunk.GetComponent<Renderer>().enabled = false;
+                Chunk.Renderer.enabled = false;
             }
         }
     }

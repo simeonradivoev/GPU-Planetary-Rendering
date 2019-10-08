@@ -13,8 +13,10 @@ float TerrainBumpScale;
 [numthreads(16,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-	float3 Pos = vertexBuffer[id.x] + normalize(vertexBuffer[id.x]) * (1 - turbulence(vertexBuffer[id.x],4)) * TerrainScale;
-	float3 P = vertexBuffer[id.x];
+    float3 vertex = vertexBuffer[id.x];
+
+	float3 Pos = vertex + normalize(vertex) * (1 - turbulence(vertex,4)) * TerrainScale;
+	float3 P = vertex;
 	float e = 4;
 	int o = 8;
 
@@ -24,6 +26,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 	float Fz = (1 - turbulence(float3(P.x,P.y,P.z+e),o)) * TerrainScale;
 	float3 dF = float3((Fx-F)/e, (Fy-F)/e, (Fz-F)/e);
 
-	normalBuffer[id.x] = normalize(normalize(vertexBuffer[id.x])-dF);
+	normalBuffer[id.x] = normalize(normalize(vertex)-dF);
 	vertexBuffer[id.x] = Pos;
 }

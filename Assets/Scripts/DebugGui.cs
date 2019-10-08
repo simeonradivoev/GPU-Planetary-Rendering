@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
+using UnityEditor;
 
 public class DebugGui : MonoBehaviour
 {
@@ -29,6 +30,7 @@ public class DebugGui : MonoBehaviour
 		GUILayout.Label("Speed: " + camera.speedMultiply, style);
 
 		showOrientationGizmo = GUILayout.Toggle(showOrientationGizmo, "Show Orientation");
+		QualitySettings.vSyncCount = GUILayout.Toggle(QualitySettings.vSyncCount == 1, "Enable VSync") ? 1 : 0;
 		GUILayout.BeginHorizontal();
 		GUILayout.Label("Downsample");
 		scatter.downscale = (int)GUILayout.HorizontalSlider(scatter.downscale, 1, 10,GUILayout.Width(100));
@@ -37,7 +39,6 @@ public class DebugGui : MonoBehaviour
 		if (GUI.changed)
 		{
 			orientationGizmo.gameObject.SetActive(showOrientationGizmo);
-			
         }
 	}
 	
