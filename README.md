@@ -17,6 +17,11 @@ The camera Controls are as follows:
 
 Updated to Unity 2019.2.8f1
 
+# Requirements 
+
+* A GPU with compute shader capability
+* A GPU with async GPU reading capability
+
 # Screenshots
 ![Screenshot1](http://i.imgur.com/Vp1Y5DO.jpg)
 ![Screenshot2](https://i.imgur.com/hEKe1zX.jpg)
